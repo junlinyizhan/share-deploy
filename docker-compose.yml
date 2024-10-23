@@ -1,0 +1,87 @@
+services:
+  mysql:
+    image: mysql:8
+    command: --mysql-native-password=ON --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --binlog-expire-logs-seconds=25920
+    restart: always
+    volumes:
+      - ./data/mysql/:/var/lib/mysql/
+      - ./docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d/
+    environment:
+      TZ: Asia/Shanghai # 指定时区
+      MYSQL_ROOT_PASSWORD: "123456" # 配置root用户密码
+      MYSQL_DATABASE: "cool" # 业务库名
+      MYSQL_USER: "cool" # 业务库用户名
+      MYSQL_PASSWORD: "123123" # 业务库密码
+
+  redis:
+    image: redis
+    # command: --requirepass "12345678" # redis库密码,不需要密码注释本行
+    restart: always
+    environment:
+      TZ: Asia/Shanghai # 指定时区
+    volumes:
+      - ./data/redis/:/data/
+    command: redis-server --appendonly yes
+
+  gpt-share-server:
+    image: jurieo/gpt-share-server:undefined #商业版标签是undefined
+    restart: always
+    ports:
+      - 38300:8001
+    environment:
+      TZ: Asia/Shanghai # 指定时区
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config.yaml:/app/config.yaml
+      - ./data/chatgpt-share-server/:/app/data/
+      - ./data/chatgpt-share-server/logs/:/app/logs/
+      - ./data/images:/app/resource/public/images/
+      - ./data/chatgpt-share-server/images:/app/public/uploads
+      # - ./data/keywords.txt:/app/data/keywords.txt # 关键词文件，每行一个。自定义的时候打开此行
+      # 如需其他映射，请在此后继续添加。
+
+    labels:
+      - "com.centurylinklabs.watchtower.scope=jurieo-chatgpt-share-web"
+    depends_on:
+      - mysql
+      - redis
+
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --scope jurieo-chatgpt-share-web --cleanup --interval 600
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+    labels:
+      - "com.centurylinklabs.watchtower.scope=jurieo-chatgpt-share-web"
+
+  # mysql定时备份,有需要可以开启，建议单独开个compose，不然每次重启都会花30s左右的时间
+  # mysql-backup:
+  #   image: databack/mysql-backup
+  #   restart: always
+  #   user: root
+  #   volumes:
+  #     - ./mysql-backup:/db # 备份文件存放目录
+  #   environment:
+  #     TZ: Asia/Shanghai
+  #     DB_SERVER: "mysql"
+  #     DB_PORT: "3306"
+  #     DB_USER: "root"
+  #     DB_PASS: "123456" # root密码
+  #     DB_HOST: "mysql"
+  #     DB_NAMES: "cool" # 备份数据库名，多个库名用,分隔
+  #     DB_DUMP_FREQ: "60" # 每60分钟一次
+  #     DB_DUMP_BEGIN: "+1" # 什么时间进行第一次转储，这里是启动后一分钟开始第一次备份
+  #     DB_DUMP_DEBUG: "false"
+  #     DB_DUMP_TARGET: "/db"
+  #   depends_on:
+  #     - mysql
+
+  # 管理mysql，非必要不开启
+  # adminer:
+  #   image: adminer
+  #   restart: always
+  #   ports:
+  #     - "18080:8080"
